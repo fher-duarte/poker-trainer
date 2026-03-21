@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 
 // ─── THEMES ──────────────────────────────────────────────────────────────────
 const DARK_THEME = {
@@ -15,6 +15,7 @@ const LIGHT_THEME = {
   orange:"#D06820", font:"-apple-system,'SF Pro Display','Segoe UI',sans-serif",
   tipBg:"#231c10", inputBg:"#EDE8DC", scoreBg:"rgba(0,0,0,0.06)",
 };
+// G is updated per render inside App()
 let G = DARK_THEME;
 
 // ─── XP / RANKS ───────────────────────────────────────────────────────────────
@@ -36,86 +37,28 @@ const xpProgress = xp => {
 };
 const xpForScore = (score,streak) => (score>=80?120:score>=60?80:score>=40?50:20)+(streak>=3?30:0);
 
-  { term:"Pot Odds",         def:"Relación entre lo que cuesta el call y el tamaño del pot." },
-  { term:"Check-Raise",      def:"Primero pasas, y cuando el oponente apuesta, subes. Una trampa." },
-  { term:"All-In",           def:"Apostar todas tus fichas disponibles en una sola mano." },
-  { term:"Flush Draw",       def:"4 cartas del mismo palo — necesitas una más para completar el color." },
-  { term:"Open-Ender",       def:"Proyecto de escalera que puede completarse por ambos extremos. 8 outs." },
-  { term:"Outs",             def:"Las cartas que quedan en el mazo que pueden mejorar tu mano." },
-  { term:"GTO",              def:"Game Theory Optimal — estrategia equilibrada y difícil de explotar." },
-  { term:"Equity",           def:"Tu probabilidad de ganar la mano en ese momento." },
-  { term:"Showdown",         def:"Al final todos muestran sus cartas y el mejor juego gana el pot." },
-  { term:"Continuation Bet", def:"Apostar en el flop después de haber subido antes del flop." },
-  { term:"Steal",            def:"Subir desde posición tardía intentando robar los ciegos." },
-];
-
-// ─── CARD COMPONENT ──────────────────────────────────────────────────────────
-function Card({ card, hidden = false, sm = false }) {
-  const W = sm ? 36 : 46, H = sm ? 52 : 66;
-  if (hidden) return (
-    <div style={{ width:W, height:H, borderRadius:6, background:"linear-gradient(145deg,#1c1c2e,#12122a)", border:"1px solid #2a2a44", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:"0 2px 8px rgba(0,0,0,0.5)" }}>
-      <div style={{ width:W*0.55, height:H*0.6, borderRadius:3, background:"repeating-linear-gradient(45deg,#1e1e35,#1e1e35 3px,#252540 3px,#252540 6px)", opacity:0.8 }} />
-    </div>
-  );
-  if (!card) return <div style={{ width:W, height:H, borderRadius:6, border:"1px dashed rgba(255,255,255,0.08)", background:"rgba(255,255,255,0.02)", flexShrink:0 }} />;
-  const rank = card.slice(0,-1), suit = card.slice(-1), col = SUIT_COL[suit]||"#111";
-  return (
-    <div style={{ width:W, height:H, borderRadius:6, background:"linear-gradient(160deg,#faf6ee,#ede8de)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", position:"relative", userSelect:"none", fontFamily:"Georgia,serif", boxShadow:"0 3px 12px rgba(0,0,0,0.55)", flexShrink:0 }}>
-      <div style={{ position:"absolute", top:2, left:4, color:col, fontSize:sm?8:10, fontWeight:900, lineHeight:1.15, textAlign:"center" }}>{rank}<br/>{SUIT_SYM[suit]}</div>
-      <div style={{ color:col, fontSize:sm?16:20, lineHeight:1 }}>{SUIT_SYM[suit]}</div>
-      <div style={{ position:"absolute", bottom:2, right:4, color:col, fontSize:sm?8:10, fontWeight:900, lineHeight:1.15, textAlign:"center", transform:"rotate(180deg)" }}>{rank}<br/>{SUIT_SYM[suit]}</div>
-    </div>
-  );
-}
-
-// ─── TOOLTIP ─────────────────────────────────────────────────────────────────
-function Tip({ word, children }) {
-  const [open, setOpen] = useState(false);
-  const entry = GLOSSARY.find(g => g.term.toLowerCase() === word.toLowerCase());
-  if (!entry) return <span>{children||word}</span>;
-  return (
-    <span style={{ position:"relative", display:"inline" }}>
-      <span onClick={()=>setOpen(o=>!o)} style={{ color:G.orange, borderBottom:`1px dashed ${G.orange}88`, cursor:"pointer", fontWeight:600 }}>{children||word}</span>
-      {open && <span onClick={()=>setOpen(false)} style={{ position:"fixed", inset:0, zIndex:98 }} />}
-      {open && <span style={{ position:"absolute", bottom:"130%", left:"50%", transform:"translateX(-50%)", background:"#1e1a14", border:`1px solid ${G.orange}55`, borderRadius:10, padding:"10px 14px", width:210, zIndex:99, fontSize:12, color:"#c8c0b0", lineHeight:1.6, boxShadow:"0 10px 30px rgba(0,0,0,0.8)", whiteSpace:"normal", display:"block" }}>
-        <strong style={{ color:G.orange }}>{entry.term}:</strong> {entry.def}
-      </span>}
-    </span>
-  );
-}
-
-// ─── DIFF BADGE ───────────────────────────────────────────────────────────────
-function DiffBadge({ mode, small=false }) {
-  const c = DC[mode] || DC.intermediate;
-  const dots = mode==="beginner"?1 : mode==="intermediate"?2 : mode==="advanced"?3 : null;
-  return (
-    <span style={{ display:"inline-flex", alignItems:"center", gap:5, background:c.bg, border:`1px solid ${c.border}`, borderRadius:20, padding:small?"3px 8px":"4px 10px", flexShrink:0 }}>
-      {dots ? <>
-        <span style={{ display:"flex", gap:2 }}>
-          {[0,1,2].map(i=><span key={i} style={{ width:small?4:5, height:small?4:5, borderRadius:"50%", background:i<dots?c.text:`${c.text}20`, display:"block" }}/>)}
-        </span>
-        <span style={{ color:c.text, fontSize:small?9:10, fontWeight:700, letterSpacing:0.3 }}>{c.label.toUpperCase()}</span>
-      </> : <span style={{ color:c.text, fontSize:small?9:10, fontWeight:700, letterSpacing:0.5 }}>{c.label.toUpperCase()}</span>}
-    </span>
-  );
-}
-
-// ─── SCORE RING ───────────────────────────────────────────────────────────────
-function ScoreRing({ score, size=64 }) {
-  const r = (size-8)/2, circ = 2*Math.PI*r;
-  const col = score>=80?"#4ade80":score>=60?"#facc15":"#fb923c";
-  return (
-    <svg width={size} height={size} style={{ transform:"rotate(-90deg)", flexShrink:0 }}>
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={5}/>
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={col} strokeWidth={5} strokeLinecap="round"
-        strokeDasharray={circ} strokeDashoffset={circ*(1-score/100)} style={{ transition:"stroke-dashoffset 0.8s ease" }}/>
-      <text x={size/2} y={size/2} textAnchor="middle" dominantBaseline="central"
-        style={{ fill:col, fontSize:size*0.28, fontWeight:800, fontFamily:G.font, transform:"rotate(90deg)", transformOrigin:`${size/2}px ${size/2}px` }}>{score}</text>
-    </svg>
-  );
-}
-
-// ─── 75 CURATED SCENARIOS ────────────────────────────────────────────────────
+// ─── DESIGN TOKENS (legacy — set per render) ─────────────────────────────────
+// G is set dynamically above
+const DC = {
+  beginner:     { bg:"#0d2818", border:"#1a5c33", text:"#4ade80",  label:"Principiante" },
+  intermediate: { bg:"#2a2000", border:"#5c4a00", text:"#facc15",  label:"Intermedio"   },
+  advanced:     { bg:"#2a1000", border:"#5c2800", text:"#fb923c",  label:"Avanzado"     },
+  random:       { bg:"#1a1030", border:"#4a3a7a", text:"#c084fc",  label:"Random"       },
+  duel:         { bg:"#1a0a28", border:"#5a2a7a", text:"#e879f9",  label:"Duelo"        },
+};
+const VC = {
+  "EXCELENTE":        { c:"#4ade80", bg:"rgba(74,222,128,0.08)",  icon:"✓" },
+  "BUENA JUGADA":     { c:"#86efac", bg:"rgba(134,239,172,0.08)", icon:"✓" },
+  "SE PUEDE MEJORAR": { c:"#facc15", bg:"rgba(250,204,21,0.08)",  icon:"!" },
+  "ERROR":            { c:"#fb923c", bg:"rgba(251,146,60,0.08)",  icon:"✕" },
+};
+const VILLAIN_PROFILES = {
+  aggressive: { label:"Agresivo", desc:"Apuesta y sube frecuentemente, poca paciencia", color:"#fb923c" },
+  balanced:   { label:"Equilibrado", desc:"Jugador sólido, mezcla bien valor y bluffs", color:"#facc15" },
+  passive:    { label:"Pasivo", desc:"Evita las confrontaciones, prefiere check y call", color:"#4ade80" },
+};
+const SUIT_SYM = { h:"♥", d:"♦", c:"♣", s:"♠" };
+const SUIT_COL = { h:"#d94f4f", d:"#d94f4f", c:"#1a1a1a", s:"#1a1a1a" };
 const GLOSSARY = [
   { term:"Hole Cards",       def:"Tus dos cartas privadas que solo tú puedes ver." },
   { term:"Board",            def:"Las cartas comunitarias en el centro que todos pueden usar." },
@@ -148,7 +91,26 @@ const GLOSSARY = [
   { term:"Steal",            def:"Subir desde posición tardía intentando robar los ciegos." },
 ];
 
-// ─── AUTO GLOSSARY PARSER ─────────────────────────────────────────────────────
+// ─── CARD COMPONENT ──────────────────────────────────────────────────────────
+function Card({ card, hidden = false, sm = false }) {
+  const W = sm ? 36 : 46, H = sm ? 52 : 66;
+  if (hidden) return (
+    <div style={{ width:W, height:H, borderRadius:6, background:"linear-gradient(145deg,#1c1c2e,#12122a)", border:"1px solid #2a2a44", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:"0 2px 8px rgba(0,0,0,0.5)" }}>
+      <div style={{ width:W*0.55, height:H*0.6, borderRadius:3, background:"repeating-linear-gradient(45deg,#1e1e35,#1e1e35 3px,#252540 3px,#252540 6px)", opacity:0.8 }} />
+    </div>
+  );
+  if (!card) return <div style={{ width:W, height:H, borderRadius:6, border:"1px dashed rgba(255,255,255,0.08)", background:"rgba(255,255,255,0.02)", flexShrink:0 }} />;
+  const rank = card.slice(0,-1), suit = card.slice(-1), col = SUIT_COL[suit]||"#111";
+  return (
+    <div style={{ width:W, height:H, borderRadius:6, background:"linear-gradient(160deg,#faf6ee,#ede8de)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", position:"relative", userSelect:"none", fontFamily:"Georgia,serif", boxShadow:"0 3px 12px rgba(0,0,0,0.55)", flexShrink:0 }}>
+      <div style={{ position:"absolute", top:2, left:4, color:col, fontSize:sm?8:10, fontWeight:900, lineHeight:1.15, textAlign:"center" }}>{rank}<br/>{SUIT_SYM[suit]}</div>
+      <div style={{ color:col, fontSize:sm?16:20, lineHeight:1 }}>{SUIT_SYM[suit]}</div>
+      <div style={{ position:"absolute", bottom:2, right:4, color:col, fontSize:sm?8:10, fontWeight:900, lineHeight:1.15, textAlign:"center", transform:"rotate(180deg)" }}>{rank}<br/>{SUIT_SYM[suit]}</div>
+    </div>
+  );
+}
+
+// ─── AUTO GLOSSARY PARSER ────────────────────────────────────────────────────
 const GLOSSARY_TERMS = GLOSSARY.map(g => g.term);
 const TERM_REGEX = new RegExp(
   `\\b(${[...GLOSSARY_TERMS].sort((a,b)=>b.length-a.length).map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')})\\b`,
@@ -187,41 +149,6 @@ function ParsedText({ text, style }) {
 }
 function Tip({ word, children }) { return <GlossaryWord word={word||children} />; }
 
-// ─── CARD COMPONENT ──────────────────────────────────────────────────────────
-function Card({ card, hidden = false, sm = false }) {
-  const W = sm ? 36 : 46, H = sm ? 52 : 66;
-  if (hidden) return (
-    <div style={{ width:W, height:H, borderRadius:6, background:"linear-gradient(145deg,#1c1c2e,#12122a)", border:"1px solid #2a2a44", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:"0 2px 8px rgba(0,0,0,0.5)" }}>
-      <div style={{ width:W*0.55, height:H*0.6, borderRadius:3, background:"repeating-linear-gradient(45deg,#1e1e35,#1e1e35 3px,#252540 3px,#252540 6px)", opacity:0.8 }} />
-    </div>
-  );
-  if (!card) return <div style={{ width:W, height:H, borderRadius:6, border:"1px dashed rgba(255,255,255,0.08)", background:"rgba(255,255,255,0.02)", flexShrink:0 }} />;
-  const rank = card.slice(0,-1), suit = card.slice(-1), col = SUIT_COL[suit]||"#111";
-  return (
-    <div style={{ width:W, height:H, borderRadius:6, background:"linear-gradient(160deg,#faf6ee,#ede8de)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", position:"relative", userSelect:"none", fontFamily:"Georgia,serif", boxShadow:"0 3px 12px rgba(0,0,0,0.55)", flexShrink:0 }}>
-      <div style={{ position:"absolute", top:2, left:4, color:col, fontSize:sm?8:10, fontWeight:900, lineHeight:1.15, textAlign:"center" }}>{rank}<br/>{SUIT_SYM[suit]}</div>
-      <div style={{ color:col, fontSize:sm?16:20, lineHeight:1 }}>{SUIT_SYM[suit]}</div>
-      <div style={{ position:"absolute", bottom:2, right:4, color:col, fontSize:sm?8:10, fontWeight:900, lineHeight:1.15, textAlign:"center", transform:"rotate(180deg)" }}>{rank}<br/>{SUIT_SYM[suit]}</div>
-    </div>
-  );
-}
-
-// ─── TOOLTIP ─────────────────────────────────────────────────────────────────
-function Tip({ word, children }) {
-  const [open, setOpen] = useState(false);
-  const entry = GLOSSARY.find(g => g.term.toLowerCase() === word.toLowerCase());
-  if (!entry) return <span>{children||word}</span>;
-  return (
-    <span style={{ position:"relative", display:"inline" }}>
-      <span onClick={()=>setOpen(o=>!o)} style={{ color:G.orange, borderBottom:`1px dashed ${G.orange}88`, cursor:"pointer", fontWeight:600 }}>{children||word}</span>
-      {open && <span onClick={()=>setOpen(false)} style={{ position:"fixed", inset:0, zIndex:98 }} />}
-      {open && <span style={{ position:"absolute", bottom:"130%", left:"50%", transform:"translateX(-50%)", background:"#1e1a14", border:`1px solid ${G.orange}55`, borderRadius:10, padding:"10px 14px", width:210, zIndex:99, fontSize:12, color:"#c8c0b0", lineHeight:1.6, boxShadow:"0 10px 30px rgba(0,0,0,0.8)", whiteSpace:"normal", display:"block" }}>
-        <strong style={{ color:G.orange }}>{entry.term}:</strong> {entry.def}
-      </span>}
-    </span>
-  );
-}
-
 // ─── DIFF BADGE ───────────────────────────────────────────────────────────────
 function DiffBadge({ mode, small=false }) {
   const c = DC[mode] || DC.intermediate;
@@ -244,7 +171,7 @@ function ScoreRing({ score, size=64 }) {
   const col = score>=80?"#4ade80":score>=60?"#facc15":"#fb923c";
   return (
     <svg width={size} height={size} style={{ transform:"rotate(-90deg)", flexShrink:0 }}>
-      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={5}/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={G.scoreBg||"rgba(255,255,255,0.06)"} strokeWidth={5}/>
       <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={col} strokeWidth={5} strokeLinecap="round"
         strokeDasharray={circ} strokeDashoffset={circ*(1-score/100)} style={{ transition:"stroke-dashoffset 0.8s ease" }}/>
       <text x={size/2} y={size/2} textAnchor="middle" dominantBaseline="central"
@@ -252,8 +179,6 @@ function ScoreRing({ score, size=64 }) {
     </svg>
   );
 }
-
-// ─── 75 CURATED SCENARIOS ────────────────────────────────────────────────────
 
 // ─── XP BAR ──────────────────────────────────────────────────────────────────
 function XPBar({ xp, showLabel=true }) {
@@ -273,6 +198,7 @@ function XPBar({ xp, showLabel=true }) {
   );
 }
 
+// ─── 75 CURATED SCENARIOS ────────────────────────────────────────────────────
 const ALL_CURATED = [
   // BEGINNER 25
   {id:"b1",mode:"beginner",cat:"value",title:"Tu primer Top Pair",holeCards:["Ah","Kd"],board:["Ks","7c","2h"],street:"flop",position:"BTN",pot:180,stack:820,villainAction:"Pasó sin apostar",context:"Tienes pareja de Reyes con As — la mejor mano posible aquí. El oponente pasó y tú tienes la mejor posición. Board tranquilo.",actions:[{id:"ck",label:"Pasar (Check)",desc:"Ves la siguiente carta gratis",icon:"✋"},{id:"s",label:"Apostar 33%",desc:"$60 — apuesta pequeña de valor",icon:"💰",amount:60},{id:"m",label:"Apostar 66%",desc:"$120 — apuesta estándar y sólida",icon:"💰💰",amount:120},{id:"b",label:"Apostar pot",desc:"$180 — apuesta agresiva",icon:"🔥",amount:180}]},
@@ -414,14 +340,12 @@ Resultado: ${result}
 SOLO JSON: {"verdict":"EXCELENTE" o "BUENA JUGADA" o "SE PUEDE MEJORAR" o "ERROR","score":75,"headline":"Frase corta (max 8 palabras)","line_analysis":"Analiza la línea completa de decisiones en 3-4 oraciones. ¿Fueron consistentes? ¿Hubo errores específicos?","key_mistake":"El error más importante si lo hubo, o 'Ningún error significativo' si la línea fue buena.","lesson":"Una lección concreta sobre jugar contra este tipo de oponente."}`,700);
 }
 
-
 async function generateSessionInsight(playerName, recentHistory) {
   const summary = recentHistory.map(h=>`${h.title}: ${h.verdict} (${h.score}/100, cat:${h.cat})`).join(' | ');
   return callClaude(`Coach de poker. El jugador ${playerName} completó 5 manos. Genera insight personalizado breve en español.
 Manos: ${summary}
 SOLO JSON: {"insight":"1-2 oraciones sobre el patrón de juego con el nombre del jugador, motivador y específico","weakness":"categoría más débil (value/bluff/draw/preflop/position)","strength":"categoría más fuerte"}`, 300);
 }
-
 
 // ─── APP ─────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -452,15 +376,15 @@ export default function App() {
   const [history, setHistory] = useState([]);
 
   // ── DUEL MODE ──────────────────────────────────────────────────────────────
-  const [duelProfile, setDuelProfile]           = useState("balanced");
-  const [duelHand, setDuelHand]                 = useState(null);
-  const [duelStreet, setDuelStreet]             = useState("flop");
-  const [duelPot, setDuelPot]                   = useState(30);
-  const [duelStack, setDuelStack]               = useState(970);
-  const [duelHeroActions, setDuelHeroActions]   = useState([]);
+  const [duelProfile, setDuelProfile]             = useState("balanced");
+  const [duelHand, setDuelHand]                   = useState(null);
+  const [duelStreet, setDuelStreet]               = useState("flop");
+  const [duelPot, setDuelPot]                     = useState(30);
+  const [duelStack, setDuelStack]                 = useState(970);
+  const [duelHeroActions, setDuelHeroActions]     = useState([]);
   const [duelVillainAction, setDuelVillainAction] = useState(null);
-  const [duelEval, setDuelEval]                 = useState(null);
-  const [duelResult, setDuelResult]             = useState("");
+  const [duelEval, setDuelEval]                   = useState(null);
+  const [duelResult, setDuelResult]               = useState("");
 
   // ── LEVEL UP & MILESTONE ───────────────────────────────────────────────────
   const [levelUpData,      setLevelUpData]      = useState(null);
@@ -496,9 +420,9 @@ export default function App() {
       const newRankData = getRank(newXp);
       setXp(newXp); localStorage.setItem('pt_xp', String(newXp));
       const newHistory = [...history, {
-        title: scenario.title, score, verdict: res.verdict,
-        lesson: res.lesson, cat: scenario.cat||res.cat||"value",
-        mode: scenario.mode||mode, xpEarned: earned
+        title:scenario.title, score, verdict:res.verdict,
+        lesson:res.lesson, cat:scenario.cat||res.cat||"value",
+        mode:scenario.mode||mode, xpEarned:earned
       }];
       setHistory(newHistory);
       if (newRankData.index > oldRankIdx) setLevelUpData({newRank:newRankData, earned, newXp});
@@ -527,16 +451,16 @@ export default function App() {
   };
 
   const next = async () => {
-    const ni = idx+1; setSelAction(null); setEval(null);
     if (milestoneData) { setView("milestone"); return; }
-    if (ni >= allScenarios.length) {
+    const ni=idx+1; setSelAction(null); setEval(null);
+    if(ni>=allScenarios.length){
       setView("generating");
-      try { const s = await generateScenario(mode, aiList.length+1); setAiList(p=>[...p,s]); setIdx(ni); setView("play"); }
-      catch { setIdx(0); setView("play"); }
+      try{ const s=await generateScenario(mode,aiList.length+1); setAiList(p=>[...p,s]); setIdx(ni); setView("play"); }
+      catch{ setIdx(0); setView("play"); }
     } else { setIdx(ni); setView("play"); }
   };
 
-  // ── DUEL ACTIONS ───────────────────────────────────────────────────────────
+  // ── DUEL MODE ──────────────────────────────────────────────────────────────
   const startDuel = async () => {
     setView("generating");
     try {
@@ -559,11 +483,13 @@ export default function App() {
       setDuelVillainAction(va);
       newPot += (va.amount||0);
       setDuelPot(newPot); setDuelStack(newStack);
+      // if hero folded or villain folded, end
       if(action.id==="fold"){ setDuelResult("El oponente gana el pot — te retiraste"); endDuel(newActions,"Te retiraste — el oponente gana el pot"); return; }
       if(va.action==="fold"){ setDuelResult("¡Ganaste el pot! — el oponente se retiró"); endDuel(newActions,"¡Ganaste el pot! El oponente se retiró"); return; }
-      const nextStreet = duelStreet==="flop"?"turn":duelStreet==="turn"?"river":"showdown";
-      setDuelStreet(nextStreet);
-      if(nextStreet==="showdown") { endDuel(newActions,"Llegaron al showdown"); }
+      // advance street
+      const next = duelStreet==="flop"?"turn":duelStreet==="turn"?"river":"showdown";
+      setDuelStreet(next);
+      if(next==="showdown") { endDuel(newActions,"Llegaron al showdown"); }
       else setView("duel_play");
     } catch { setView("duel_play"); }
   };
@@ -571,7 +497,7 @@ export default function App() {
   const endDuel = async (actions, result) => {
     setDuelResult(result); setView("duel_eval");
     try {
-      const ev = await evaluateDuelLine(duelHand, actions, result, duelProfile);
+      const ev = await evaluateDuelLine(duelHand,actions,result,duelProfile);
       setDuelEval(ev);
       setHistory(h=>[...h,{title:`Duelo vs ${VILLAIN_PROFILES[duelProfile].label}`,score:ev.score||0,verdict:ev.verdict,lesson:ev.lesson,cat:"duel",mode:"duel",xpEarned:0}]);
     } catch { setDuelEval({verdict:"ERROR",score:0,headline:"Error de análisis",line_analysis:"No se pudo evaluar.",key_mistake:"—",lesson:"—"}); }
@@ -592,22 +518,13 @@ export default function App() {
   const CAT_LABELS  = {value:"💰 Value",bluff:"🎭 Bluff",draw:"🎯 Draw",preflop:"🃏 Preflop",position:"📍 Posición",duel:"⚔️ Duelo"};
   const CAT_COLORS  = {value:"#4ade80",bluff:"#fb923c",draw:"#60a5fa",preflop:"#c084fc",position:"#facc15",duel:"#e879f9"};
 
-  const Styles = () => <style>{`
-    @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
-    @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
-    @keyframes hexPop{0%{transform:scale(0.2);opacity:0}65%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}
-    @keyframes confettiFall{0%{transform:translateY(-20px) rotate(0);opacity:1}100%{transform:translateY(120px) rotate(720deg);opacity:0}}
-    *{-webkit-tap-highlight-color:transparent}
-  `}</style>;
-
   const ThemeBtn = () => (
     <button onClick={toggleTheme} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:"7px 10px",cursor:"pointer",fontSize:15,lineHeight:1,WebkitTapHighlightColor:"transparent"}}>{isDark?"☀️":"🌙"}</button>
   );
 
   const Nav = ({onBack,backLabel="← Menú",right}) => (
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px 10px",flexShrink:0}}>
-      <button onClick={onBack} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:"8px 14px",color:G.muted,cursor:"pointer",fontFamily:G.font,fontSize:13,fontWeight:600}}>{backLabel}</button>
+      <button onClick={onBack} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:"8px 14px",color:G.muted,cursor:"pointer",fontFamily:G.font,fontSize:13,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>{backLabel}</button>
       <div style={{display:"flex",alignItems:"center",gap:8}}>{right}</div>
     </div>
   );
@@ -622,6 +539,15 @@ export default function App() {
       {children}
     </div>
   );
+
+  const Styles = () => <style>{`
+    @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+    @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+    @keyframes hexPop{0%{transform:scale(0.2);opacity:0}65%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}
+    @keyframes confettiFall{0%{transform:translateY(-20px) rotate(0);opacity:1}100%{transform:translateY(120px) rotate(720deg);opacity:0}}
+    *{-webkit-tap-highlight-color:transparent}
+  `}</style>;
 
   const pg = {minHeight:"100vh",background:G.bg,fontFamily:G.font,color:G.text,WebkitFontSmoothing:"antialiased",transition:"background .25s,color .25s"};
 
@@ -690,7 +616,7 @@ export default function App() {
     );
   }
 
-  // ── MILESTONE (every 5 hands) ─────────────────────────────────────────────
+  // ── MILESTONE ────────────────────────────────────────────────────────────
   if(view==="milestone" && milestoneData) {
     const {scores, insight, weakCat, strongCat, xpEarned, total} = milestoneData;
     const avg = Math.round(scores.reduce((a,b)=>a+b,0)/scores.length);
@@ -754,10 +680,10 @@ export default function App() {
     );
   }
 
-
-  // ── MENU ───────────────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── MENU ─────────────────────────────────────────────────────────────────
   if(view==="menu") return (
-    <div style={pg}>
+    <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.font,color:G.text,WebkitFontSmoothing:"antialiased",transition:"background .25s,color .25s"}}>
       <Styles/>
       <div style={{maxWidth:480,margin:"0 auto",padding:"0 16px 48px"}}>
         {/* Header */}
@@ -828,13 +754,25 @@ export default function App() {
           {history.length>0&&<button onClick={openHistory} style={{flex:1,padding:"11px",background:"transparent",border:`1px solid ${G.border}`,borderRadius:12,color:G.muted,fontSize:13,cursor:"pointer",fontFamily:G.font}}>📊 Mi Sesión</button>}
         </div>
 
-        <div style={{background:`${G.orange}0a`,border:`1px solid ${G.orange}20`,borderRadius:10,padding:"10px 13px"}}>
+        {/* Stats */}
+        {history.length>0&&(
+          <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:"14px 16px",display:"flex"}}>
+            {[["MANOS",history.length,G.text],["SCORE AVG",avgScore,avgScore>=75?"#4ade80":avgScore>=55?"#facc15":"#fb923c"]].map(([l,v,col],i)=>(
+              <div key={l} style={{flex:1,textAlign:"center",borderRight:i===0?`1px solid ${G.border}`:"none"}}>
+                <div style={{color:col,fontSize:24,fontWeight:800}}>{v}</div>
+                <div style={{color:G.muted,fontSize:10,fontWeight:700,letterSpacing:1.2,marginTop:2}}>{l}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{background:`${G.orange}0a`,border:`1px solid ${G.orange}20`,borderRadius:10,padding:"10px 13px",marginTop:10}}>
           <p style={{color:G.muted,fontSize:12,margin:0,lineHeight:1.6}}>Los términos en <span style={{color:G.orange,fontWeight:600}}>naranja</span> son clickeables — tócalos para ver su definición.</p>
         </div>
       </div>
     </div>
   );
 
+  // ── GLOSSARY ──────────────────────────────────────────────────────────────
   if(view==="glossary") return (
     <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.font,color:G.text}}>
       <div style={{maxWidth:480,margin:"0 auto",padding:"0 16px 48px"}}>
@@ -1191,7 +1129,8 @@ export default function App() {
           right={<>
             {history.length>0&&<div style={{textAlign:"center"}}><div style={{color:avgScore>=75?"#4ade80":avgScore>=55?"#facc15":"#fb923c",fontSize:15,fontWeight:800,lineHeight:1}}>{avgScore}</div><div style={{color:G.muted,fontSize:9,fontWeight:700,letterSpacing:1}}>AVG</div></div>}
             <button onClick={openHistory} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:"7px 11px",color:G.muted,cursor:"pointer",fontFamily:G.font,fontSize:12,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>📊</button>
-            <button onClick={openGlossary} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:"7px 11px",color:G.muted,cursor:"pointer",fontFamily:G.font,fontSize:12,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>📖</button><ThemeBtn/>
+            <button onClick={openGlossary} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:"7px 11px",color:G.muted,cursor:"pointer",fontFamily:G.font,fontSize:12,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>📖</button>
+            <ThemeBtn/>
           </>}
         />
         <div style={{flex:1,overflowY:"auto",padding:"0 16px 24px",animation:"fadeIn 0.2s ease"}}>
@@ -1278,11 +1217,11 @@ export default function App() {
                 </div>
               </div>
               <IB label="TU DECISIÓN" accent><div style={{color:G.orange,fontWeight:700,fontSize:13}}>{selAction?.label}{selAction?.amount?` — $${selAction.amount}`:""}</div></IB>
-              <IB label="¿POR QUÉ?"><p style={{color:"#c8bfb0",fontSize:14,margin:0,lineHeight:1.7}}><ParsedText text={eval_.reasoning} /></p></IB>
-              <IB label="LO IDEAL HUBIERA SIDO"><p style={{color:"#c8bfb0",fontSize:14,margin:0,lineHeight:1.7}}><ParsedText text={eval_.better_play} /></p></IB>
+              <IB label="¿POR QUÉ?"><p style={{color:"#c8bfb0",fontSize:14,margin:0,lineHeight:1.7}}><ParsedText text={eval_.reasoning}/></p></IB>
+              <IB label="LO IDEAL HUBIERA SIDO"><p style={{color:"#c8bfb0",fontSize:14,margin:0,lineHeight:1.7}}><ParsedText text={eval_.better_play}/></p></IB>
               <div style={{background:`${G.orange}08`,border:`1px solid ${G.orange}25`,borderRadius:12,padding:"12px 13px",marginBottom:14,display:"flex",gap:9,alignItems:"flex-start"}}>
                 <div style={{width:26,height:26,borderRadius:7,background:`${G.orange}20`,border:`1px solid ${G.orange}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0}}>💡</div>
-                <div><div style={{color:G.orange,fontSize:9,fontWeight:700,letterSpacing:1.5,marginBottom:4}}>LECCIÓN</div><p style={{color:"#d4c8b8",fontSize:13,margin:0,fontWeight:500,lineHeight:1.6}}><ParsedText text={eval_.lesson} /></p></div>
+                <div><div style={{color:G.orange,fontSize:9,fontWeight:700,letterSpacing:1.5,marginBottom:4}}>LECCIÓN</div><p style={{color:"#d4c8b8",fontSize:13,margin:0,fontWeight:500,lineHeight:1.6}}><ParsedText text={eval_.lesson}/></p></div>
               </div>
               <button onClick={next} style={{width:"100%",padding:"15px",background:sc.text,border:"none",borderRadius:13,color:"#0a0a0f",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:G.font,WebkitTapHighlightColor:"transparent"}}>
                 {milestoneData?"Ver resumen →":idx+1>=allScenarios.length?"Generar nueva mano →":"Siguiente mano →"}
