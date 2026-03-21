@@ -1,51 +1,41 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 
-// ─── DESIGN TOKENS ───────────────────────────────────────────────────────────
-const G = {
-  bg: "#0C0C10", surface: "#141418", surface2: "#1a1a20",
-  border: "rgba(255,255,255,0.07)", borderMid: "rgba(255,255,255,0.12)",
-  text: "#EAE6DE", muted: "#6B6560", faint: "#3a3830",
-  orange: "#FF914D", font: "-apple-system,'SF Pro Display','Segoe UI',sans-serif",
+// ─── THEMES ──────────────────────────────────────────────────────────────────
+const DARK_THEME = {
+  bg:"#0C0C10", surface:"#141418", surface2:"#1a1a20",
+  border:"rgba(255,255,255,0.07)", borderMid:"rgba(255,255,255,0.12)",
+  text:"#EAE6DE", muted:"#6B6560", faint:"#3a3830",
+  orange:"#FF914D", font:"-apple-system,'SF Pro Display','Segoe UI',sans-serif",
+  tipBg:"#1e1a14", inputBg:"#0C0C10", scoreBg:"rgba(255,255,255,0.06)",
 };
-const DC = {
-  beginner:     { bg:"#0d2818", border:"#1a5c33", text:"#4ade80",  label:"Principiante" },
-  intermediate: { bg:"#2a2000", border:"#5c4a00", text:"#facc15",  label:"Intermedio"   },
-  advanced:     { bg:"#2a1000", border:"#5c2800", text:"#fb923c",  label:"Avanzado"     },
-  random:       { bg:"#1a1030", border:"#4a3a7a", text:"#c084fc",  label:"Random"       },
-  duel:         { bg:"#1a0a28", border:"#5a2a7a", text:"#e879f9",  label:"Duelo"        },
+const LIGHT_THEME = {
+  bg:"#F2EDE4", surface:"#FDFAF4", surface2:"#EAE4D8",
+  border:"rgba(0,0,0,0.09)", borderMid:"rgba(0,0,0,0.16)",
+  text:"#1A1410", muted:"#7A7068", faint:"#DDD8CE",
+  orange:"#D06820", font:"-apple-system,'SF Pro Display','Segoe UI',sans-serif",
+  tipBg:"#231c10", inputBg:"#EDE8DC", scoreBg:"rgba(0,0,0,0.06)",
 };
-const VC = {
-  "EXCELENTE":        { c:"#4ade80", bg:"rgba(74,222,128,0.08)",  icon:"✓" },
-  "BUENA JUGADA":     { c:"#86efac", bg:"rgba(134,239,172,0.08)", icon:"✓" },
-  "SE PUEDE MEJORAR": { c:"#facc15", bg:"rgba(250,204,21,0.08)",  icon:"!" },
-  "ERROR":            { c:"#fb923c", bg:"rgba(251,146,60,0.08)",  icon:"✕" },
+let G = DARK_THEME;
+
+// ─── XP / RANKS ───────────────────────────────────────────────────────────────
+const RANKS = [
+  {name:"Novato",     minXP:0,     icon:"🂠", color:"#94a3b8"},
+  {name:"Amateur",    minXP:500,   icon:"♣",  color:"#4ade80"},
+  {name:"Regular",    minXP:1500,  icon:"♦",  color:"#60a5fa"},
+  {name:"Competidor", minXP:3500,  icon:"♥",  color:"#f472b6"},
+  {name:"Avanzado",   minXP:7000,  icon:"♠",  color:"#facc15"},
+  {name:"Shark",      minXP:13000, icon:"🃏", color:"#fb923c"},
+  {name:"Pro",        minXP:25000, icon:"👑", color:"#e879f9"},
+];
+const getRank = xp => { for(let i=RANKS.length-1;i>=0;i--) if(xp>=RANKS[i].minXP) return {...RANKS[i],index:i}; return {...RANKS[0],index:0}; };
+const xpProgress = xp => {
+  const r=getRank(xp), next=RANKS[r.index+1];
+  if(!next) return {pct:100,current:xp-r.minXP,needed:0,rank:r};
+  const cur=xp-r.minXP, need=next.minXP-r.minXP;
+  return {pct:Math.min(100,Math.round(cur/need*100)),current:cur,needed:need,rank:r};
 };
-const VILLAIN_PROFILES = {
-  aggressive: { label:"Agresivo", desc:"Apuesta y sube frecuentemente, poca paciencia", color:"#fb923c" },
-  balanced:   { label:"Equilibrado", desc:"Jugador sólido, mezcla bien valor y bluffs", color:"#facc15" },
-  passive:    { label:"Pasivo", desc:"Evita las confrontaciones, prefiere check y call", color:"#4ade80" },
-};
-const SUIT_SYM = { h:"♥", d:"♦", c:"♣", s:"♠" };
-const SUIT_COL = { h:"#d94f4f", d:"#d94f4f", c:"#1a1a1a", s:"#1a1a1a" };
-const GLOSSARY = [
-  { term:"Hole Cards",       def:"Tus dos cartas privadas que solo tú puedes ver." },
-  { term:"Board",            def:"Las cartas comunitarias en el centro que todos pueden usar." },
-  { term:"Flop",             def:"Las primeras 3 cartas comunitarias que se revelan." },
-  { term:"Turn",             def:"La 4ª carta comunitaria." },
-  { term:"River",            def:"La 5ª y última carta comunitaria." },
-  { term:"Pot",              def:"El total de fichas apostadas. El ganador se lo lleva todo." },
-  { term:"Stack",            def:"Tus fichas disponibles para apostar en esta mano." },
-  { term:"BTN",              def:"Button — la mejor posición. Actúas de último." },
-  { term:"SB",               def:"Small Blind — apuesta forzada pequeña. Actúas primero." },
-  { term:"BB",               def:"Big Blind — apuesta forzada doble del SB." },
-  { term:"UTG",              def:"Under The Gun — el primero en actuar preflop." },
-  { term:"CO",               def:"Cutoff — posición justo antes del Button." },
-  { term:"Check",            def:"Pasar sin apostar. Solo si nadie apostó antes." },
-  { term:"Call",             def:"Igualar la apuesta del oponente para seguir." },
-  { term:"Raise",            def:"Subir la apuesta. El oponente debe pagar más o retirarse." },
-  { term:"Fold",             def:"Retirarse. Pierdes lo apostado pero no arriesgas más." },
-  { term:"Bluff",            def:"Apostar con mano mala esperando que el oponente se retire." },
-  { term:"Value Bet",        def:"Apostar con mano fuerte para que el oponente pague." },
+const xpForScore = (score,streak) => (score>=80?120:score>=60?80:score>=40?50:20)+(streak>=3?30:0);
+
   { term:"Pot Odds",         def:"Relación entre lo que cuesta el call y el tamaño del pot." },
   { term:"Check-Raise",      def:"Primero pasas, y cuando el oponente apuesta, subes. Una trampa." },
   { term:"All-In",           def:"Apostar todas tus fichas disponibles en una sola mano." },
@@ -126,6 +116,163 @@ function ScoreRing({ score, size=64 }) {
 }
 
 // ─── 75 CURATED SCENARIOS ────────────────────────────────────────────────────
+const GLOSSARY = [
+  { term:"Hole Cards",       def:"Tus dos cartas privadas que solo tú puedes ver." },
+  { term:"Board",            def:"Las cartas comunitarias en el centro que todos pueden usar." },
+  { term:"Flop",             def:"Las primeras 3 cartas comunitarias que se revelan." },
+  { term:"Turn",             def:"La 4ª carta comunitaria." },
+  { term:"River",            def:"La 5ª y última carta comunitaria." },
+  { term:"Pot",              def:"El total de fichas apostadas. El ganador se lo lleva todo." },
+  { term:"Stack",            def:"Tus fichas disponibles para apostar en esta mano." },
+  { term:"BTN",              def:"Button — la mejor posición. Actúas de último." },
+  { term:"SB",               def:"Small Blind — apuesta forzada pequeña. Actúas primero." },
+  { term:"BB",               def:"Big Blind — apuesta forzada doble del SB." },
+  { term:"UTG",              def:"Under The Gun — el primero en actuar preflop." },
+  { term:"CO",               def:"Cutoff — posición justo antes del Button." },
+  { term:"Check",            def:"Pasar sin apostar. Solo si nadie apostó antes." },
+  { term:"Call",             def:"Igualar la apuesta del oponente para seguir." },
+  { term:"Raise",            def:"Subir la apuesta. El oponente debe pagar más o retirarse." },
+  { term:"Fold",             def:"Retirarse. Pierdes lo apostado pero no arriesgas más." },
+  { term:"Bluff",            def:"Apostar con mano mala esperando que el oponente se retire." },
+  { term:"Value Bet",        def:"Apostar con mano fuerte para que el oponente pague." },
+  { term:"Pot Odds",         def:"Relación entre lo que cuesta el call y el tamaño del pot." },
+  { term:"Check-Raise",      def:"Primero pasas, y cuando el oponente apuesta, subes. Una trampa." },
+  { term:"All-In",           def:"Apostar todas tus fichas disponibles en una sola mano." },
+  { term:"Flush Draw",       def:"4 cartas del mismo palo — necesitas una más para completar el color." },
+  { term:"Open-Ender",       def:"Proyecto de escalera que puede completarse por ambos extremos. 8 outs." },
+  { term:"Outs",             def:"Las cartas que quedan en el mazo que pueden mejorar tu mano." },
+  { term:"GTO",              def:"Game Theory Optimal — estrategia equilibrada y difícil de explotar." },
+  { term:"Equity",           def:"Tu probabilidad de ganar la mano en ese momento." },
+  { term:"Showdown",         def:"Al final todos muestran sus cartas y el mejor juego gana el pot." },
+  { term:"Continuation Bet", def:"Apostar en el flop después de haber subido antes del flop." },
+  { term:"Steal",            def:"Subir desde posición tardía intentando robar los ciegos." },
+];
+
+// ─── AUTO GLOSSARY PARSER ─────────────────────────────────────────────────────
+const GLOSSARY_TERMS = GLOSSARY.map(g => g.term);
+const TERM_REGEX = new RegExp(
+  `\\b(${[...GLOSSARY_TERMS].sort((a,b)=>b.length-a.length).map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')})\\b`,
+  'gi'
+);
+function GlossaryWord({ word }) {
+  const [open, setOpen] = useState(false);
+  const entry = GLOSSARY.find(g => g.term.toLowerCase() === word.toLowerCase());
+  if (!entry) return <span>{word}</span>;
+  return (
+    <span style={{ position:"relative", display:"inline" }}>
+      <span onClick={()=>setOpen(o=>!o)} style={{ color:G.orange, borderBottom:`1.5px dotted ${G.orange}`, cursor:"pointer", fontWeight:600 }}>{word}</span>
+      {open && <span onClick={()=>setOpen(false)} style={{ position:"fixed", inset:0, zIndex:198 }} />}
+      {open && (
+        <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", background:G.tipBg||"#1e1a14", border:`1px solid ${G.orange}55`, borderRadius:14, padding:"18px 20px", width:280, zIndex:199, boxShadow:"0 20px 60px rgba(0,0,0,0.85)", fontFamily:G.font }}>
+          <div style={{ color:G.orange, fontWeight:800, fontSize:15, marginBottom:8 }}>{entry.term}</div>
+          <div style={{ color:"#c8c0b0", fontSize:14, lineHeight:1.7 }}>{entry.def}</div>
+          <div style={{ marginTop:10, textAlign:"center", color:"#6b6560", fontSize:11 }}>Tap fuera para cerrar</div>
+        </div>
+      )}
+    </span>
+  );
+}
+function ParsedText({ text, style }) {
+  if (!text) return null;
+  const parts = text.split(TERM_REGEX);
+  return (
+    <span style={style}>
+      {parts.map((p,i) =>
+        GLOSSARY_TERMS.some(t => t.toLowerCase() === p.toLowerCase())
+          ? <GlossaryWord key={i} word={p} />
+          : <span key={i}>{p}</span>
+      )}
+    </span>
+  );
+}
+function Tip({ word, children }) { return <GlossaryWord word={word||children} />; }
+
+// ─── CARD COMPONENT ──────────────────────────────────────────────────────────
+function Card({ card, hidden = false, sm = false }) {
+  const W = sm ? 36 : 46, H = sm ? 52 : 66;
+  if (hidden) return (
+    <div style={{ width:W, height:H, borderRadius:6, background:"linear-gradient(145deg,#1c1c2e,#12122a)", border:"1px solid #2a2a44", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, boxShadow:"0 2px 8px rgba(0,0,0,0.5)" }}>
+      <div style={{ width:W*0.55, height:H*0.6, borderRadius:3, background:"repeating-linear-gradient(45deg,#1e1e35,#1e1e35 3px,#252540 3px,#252540 6px)", opacity:0.8 }} />
+    </div>
+  );
+  if (!card) return <div style={{ width:W, height:H, borderRadius:6, border:"1px dashed rgba(255,255,255,0.08)", background:"rgba(255,255,255,0.02)", flexShrink:0 }} />;
+  const rank = card.slice(0,-1), suit = card.slice(-1), col = SUIT_COL[suit]||"#111";
+  return (
+    <div style={{ width:W, height:H, borderRadius:6, background:"linear-gradient(160deg,#faf6ee,#ede8de)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", position:"relative", userSelect:"none", fontFamily:"Georgia,serif", boxShadow:"0 3px 12px rgba(0,0,0,0.55)", flexShrink:0 }}>
+      <div style={{ position:"absolute", top:2, left:4, color:col, fontSize:sm?8:10, fontWeight:900, lineHeight:1.15, textAlign:"center" }}>{rank}<br/>{SUIT_SYM[suit]}</div>
+      <div style={{ color:col, fontSize:sm?16:20, lineHeight:1 }}>{SUIT_SYM[suit]}</div>
+      <div style={{ position:"absolute", bottom:2, right:4, color:col, fontSize:sm?8:10, fontWeight:900, lineHeight:1.15, textAlign:"center", transform:"rotate(180deg)" }}>{rank}<br/>{SUIT_SYM[suit]}</div>
+    </div>
+  );
+}
+
+// ─── TOOLTIP ─────────────────────────────────────────────────────────────────
+function Tip({ word, children }) {
+  const [open, setOpen] = useState(false);
+  const entry = GLOSSARY.find(g => g.term.toLowerCase() === word.toLowerCase());
+  if (!entry) return <span>{children||word}</span>;
+  return (
+    <span style={{ position:"relative", display:"inline" }}>
+      <span onClick={()=>setOpen(o=>!o)} style={{ color:G.orange, borderBottom:`1px dashed ${G.orange}88`, cursor:"pointer", fontWeight:600 }}>{children||word}</span>
+      {open && <span onClick={()=>setOpen(false)} style={{ position:"fixed", inset:0, zIndex:98 }} />}
+      {open && <span style={{ position:"absolute", bottom:"130%", left:"50%", transform:"translateX(-50%)", background:"#1e1a14", border:`1px solid ${G.orange}55`, borderRadius:10, padding:"10px 14px", width:210, zIndex:99, fontSize:12, color:"#c8c0b0", lineHeight:1.6, boxShadow:"0 10px 30px rgba(0,0,0,0.8)", whiteSpace:"normal", display:"block" }}>
+        <strong style={{ color:G.orange }}>{entry.term}:</strong> {entry.def}
+      </span>}
+    </span>
+  );
+}
+
+// ─── DIFF BADGE ───────────────────────────────────────────────────────────────
+function DiffBadge({ mode, small=false }) {
+  const c = DC[mode] || DC.intermediate;
+  const dots = mode==="beginner"?1 : mode==="intermediate"?2 : mode==="advanced"?3 : null;
+  return (
+    <span style={{ display:"inline-flex", alignItems:"center", gap:5, background:c.bg, border:`1px solid ${c.border}`, borderRadius:20, padding:small?"3px 8px":"4px 10px", flexShrink:0 }}>
+      {dots ? <>
+        <span style={{ display:"flex", gap:2 }}>
+          {[0,1,2].map(i=><span key={i} style={{ width:small?4:5, height:small?4:5, borderRadius:"50%", background:i<dots?c.text:`${c.text}20`, display:"block" }}/>)}
+        </span>
+        <span style={{ color:c.text, fontSize:small?9:10, fontWeight:700, letterSpacing:0.3 }}>{c.label.toUpperCase()}</span>
+      </> : <span style={{ color:c.text, fontSize:small?9:10, fontWeight:700, letterSpacing:0.5 }}>{c.label.toUpperCase()}</span>}
+    </span>
+  );
+}
+
+// ─── SCORE RING ───────────────────────────────────────────────────────────────
+function ScoreRing({ score, size=64 }) {
+  const r = (size-8)/2, circ = 2*Math.PI*r;
+  const col = score>=80?"#4ade80":score>=60?"#facc15":"#fb923c";
+  return (
+    <svg width={size} height={size} style={{ transform:"rotate(-90deg)", flexShrink:0 }}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={5}/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={col} strokeWidth={5} strokeLinecap="round"
+        strokeDasharray={circ} strokeDashoffset={circ*(1-score/100)} style={{ transition:"stroke-dashoffset 0.8s ease" }}/>
+      <text x={size/2} y={size/2} textAnchor="middle" dominantBaseline="central"
+        style={{ fill:col, fontSize:size*0.28, fontWeight:800, fontFamily:G.font, transform:"rotate(90deg)", transformOrigin:`${size/2}px ${size/2}px` }}>{score}</text>
+    </svg>
+  );
+}
+
+// ─── 75 CURATED SCENARIOS ────────────────────────────────────────────────────
+
+// ─── XP BAR ──────────────────────────────────────────────────────────────────
+function XPBar({ xp, showLabel=true }) {
+  const {pct, current, needed, rank} = xpProgress(xp);
+  return (
+    <div style={{ width:"100%" }}>
+      {showLabel && (
+        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
+          <span style={{ color:rank.color, fontSize:11, fontWeight:700 }}>{rank.icon} {rank.name}</span>
+          <span style={{ color:G.muted, fontSize:11 }}>{current} / {needed||"MAX"} XP</span>
+        </div>
+      )}
+      <div style={{ height:6, background:G.border, borderRadius:3, overflow:"hidden" }}>
+        <div style={{ height:"100%", width:`${pct}%`, background:rank.color, borderRadius:3, transition:"width 1s ease" }}/>
+      </div>
+    </div>
+  );
+}
+
 const ALL_CURATED = [
   // BEGINNER 25
   {id:"b1",mode:"beginner",cat:"value",title:"Tu primer Top Pair",holeCards:["Ah","Kd"],board:["Ks","7c","2h"],street:"flop",position:"BTN",pot:180,stack:820,villainAction:"Pasó sin apostar",context:"Tienes pareja de Reyes con As — la mejor mano posible aquí. El oponente pasó y tú tienes la mejor posición. Board tranquilo.",actions:[{id:"ck",label:"Pasar (Check)",desc:"Ves la siguiente carta gratis",icon:"✋"},{id:"s",label:"Apostar 33%",desc:"$60 — apuesta pequeña de valor",icon:"💰",amount:60},{id:"m",label:"Apostar 66%",desc:"$120 — apuesta estándar y sólida",icon:"💰💰",amount:120},{id:"b",label:"Apostar pot",desc:"$180 — apuesta agresiva",icon:"🔥",amount:180}]},
@@ -209,8 +356,15 @@ const ALL_CURATED = [
 
 // ─── AI FUNCTIONS ────────────────────────────────────────────────────────────
 async function callClaude(prompt, maxTokens=800) {
+  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY;
   const r = await fetch("https://api.anthropic.com/v1/messages", {
-    method:"POST", headers:{"Content-Type":"application/json","x-api-key":import.meta.env.VITE_ANTHROPIC_API_KEY,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    method:"POST",
+    headers:{
+      "Content-Type":"application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
     body: JSON.stringify({ model:"claude-sonnet-4-20250514", max_tokens:maxTokens, messages:[{role:"user",content:prompt}] })
   });
   const d = await r.json();
@@ -260,39 +414,71 @@ Resultado: ${result}
 SOLO JSON: {"verdict":"EXCELENTE" o "BUENA JUGADA" o "SE PUEDE MEJORAR" o "ERROR","score":75,"headline":"Frase corta (max 8 palabras)","line_analysis":"Analiza la línea completa de decisiones en 3-4 oraciones. ¿Fueron consistentes? ¿Hubo errores específicos?","key_mistake":"El error más importante si lo hubo, o 'Ningún error significativo' si la línea fue buena.","lesson":"Una lección concreta sobre jugar contra este tipo de oponente."}`,700);
 }
 
+
+async function generateSessionInsight(playerName, recentHistory) {
+  const summary = recentHistory.map(h=>`${h.title}: ${h.verdict} (${h.score}/100, cat:${h.cat})`).join(' | ');
+  return callClaude(`Coach de poker. El jugador ${playerName} completó 5 manos. Genera insight personalizado breve en español.
+Manos: ${summary}
+SOLO JSON: {"insight":"1-2 oraciones sobre el patrón de juego con el nombre del jugador, motivador y específico","weakness":"categoría más débil (value/bluff/draw/preflop/position)","strength":"categoría más fuerte"}`, 300);
+}
+
+
 // ─── APP ─────────────────────────────────────────────────────────────────────
 export default function App() {
-  // Navigation
-  const [view, setView] = useState("menu"); // menu|play|evaluating|result|generating|glossary|history|duel_setup|duel_play|duel_villain|duel_result|duel_eval
-  const [prevView, setPrevView] = useState("menu");
-  // Training mode
-  const [mode, setMode]       = useState(null);
-  const [curated, setCurated] = useState([]);
-  const [aiList, setAiList]   = useState([]);
-  const [idx, setIdx]         = useState(0);
-  const [selAction, setSelAction] = useState(null);
-  const [eval_, setEval]      = useState(null);
-  // Session history
-  const [history, setHistory] = useState([]); // [{title,score,verdict,lesson,cat,mode}]
-  // Duel mode
-  const [duelProfile, setDuelProfile] = useState("balanced");
-  const [duelHand, setDuelHand]   = useState(null);
-  const [duelStreet, setDuelStreet] = useState("flop"); // flop|turn|river|showdown
-  const [duelPot, setDuelPot]     = useState(30);
-  const [duelStack, setDuelStack] = useState(970);
-  const [duelHeroActions, setDuelHeroActions] = useState([]);
-  const [duelVillainAction, setDuelVillainAction] = useState(null);
-  const [duelEval, setDuelEval]   = useState(null);
-  const [duelResult, setDuelResult] = useState("");
+  // ── THEME ──────────────────────────────────────────────────────────────────
+  const [isDark, setIsDark] = useState(() => localStorage.getItem('pt_theme') !== 'light');
+  G = isDark ? DARK_THEME : LIGHT_THEME;
+  const toggleTheme = () => setIsDark(d => { const n=!d; localStorage.setItem('pt_theme',n?'dark':'light'); return n; });
 
-  const allScenarios = [...curated, ...aiList];
-  const scenario = allScenarios[idx];
-  const avgScore = history.length>0 ? Math.round(history.reduce((a,h)=>a+h.score,0)/history.length) : 0;
+  // ── PLAYER ─────────────────────────────────────────────────────────────────
+  const [playerName, setPlayerName] = useState(() => localStorage.getItem('pt_name')||'');
+  const [nameInput,  setNameInput]  = useState('');
+  const [xp,   setXp]    = useState(() => parseInt(localStorage.getItem('pt_xp')||'0'));
+  const [streak, setStreak] = useState(() => parseInt(localStorage.getItem('pt_streak')||'0'));
+
+  // ── NAVIGATION ─────────────────────────────────────────────────────────────
+  const [view, setView] = useState(() => localStorage.getItem('pt_name') ? "menu" : "welcome");
+  const [prevView, setPrevView] = useState("menu");
 
   // ── TRAINING MODE ──────────────────────────────────────────────────────────
+  const [mode, setMode]           = useState(null);
+  const [curated, setCurated]     = useState([]);
+  const [aiList, setAiList]       = useState([]);
+  const [idx, setIdx]             = useState(0);
+  const [selAction, setSelAction] = useState(null);
+  const [eval_, setEval]          = useState(null);
+
+  // ── SESSION ────────────────────────────────────────────────────────────────
+  const [history, setHistory] = useState([]);
+
+  // ── DUEL MODE ──────────────────────────────────────────────────────────────
+  const [duelProfile, setDuelProfile]           = useState("balanced");
+  const [duelHand, setDuelHand]                 = useState(null);
+  const [duelStreet, setDuelStreet]             = useState("flop");
+  const [duelPot, setDuelPot]                   = useState(30);
+  const [duelStack, setDuelStack]               = useState(970);
+  const [duelHeroActions, setDuelHeroActions]   = useState([]);
+  const [duelVillainAction, setDuelVillainAction] = useState(null);
+  const [duelEval, setDuelEval]                 = useState(null);
+  const [duelResult, setDuelResult]             = useState("");
+
+  // ── LEVEL UP & MILESTONE ───────────────────────────────────────────────────
+  const [levelUpData,      setLevelUpData]      = useState(null);
+  const [milestoneData,    setMilestoneData]    = useState(null);
+  const [milestoneLoading, setMilestoneLoading] = useState(false);
+
+  // ── DERIVED ────────────────────────────────────────────────────────────────
+  const allScenarios = [...curated, ...aiList];
+  const scenario     = allScenarios[idx];
+  const avgScore     = history.length>0 ? Math.round(history.reduce((a,h)=>a+h.score,0)/history.length) : 0;
+  const rank         = getRank(xp);
+
+  // ── TRAINING ACTIONS ───────────────────────────────────────────────────────
   const startMode = (m) => {
     setMode(m);
-    const pool = m==="random" ? [...ALL_CURATED].sort(()=>Math.random()-0.5) : ALL_CURATED.filter(s=>s.mode===m);
+    const pool = m==="random"
+      ? [...ALL_CURATED].sort(()=>Math.random()-0.5)
+      : [...ALL_CURATED.filter(s=>s.mode===m)].sort(()=>Math.random()-0.5);
     setCurated(pool); setAiList([]); setIdx(0); setSelAction(null); setEval(null); setView("play");
   };
 
@@ -301,7 +487,38 @@ export default function App() {
     try {
       const res = await evaluateAction(scenario, action);
       setEval(res);
-      setHistory(h=>[...h,{title:scenario.title,score:res.score||0,verdict:res.verdict,lesson:res.lesson,cat:scenario.cat||res.cat||"value",mode:scenario.mode||mode}]);
+      const score = res.score || 0;
+      const newStreak = score >= 70 ? streak + 1 : 0;
+      setStreak(newStreak); localStorage.setItem('pt_streak', String(newStreak));
+      const earned = xpForScore(score, newStreak);
+      const oldRankIdx = getRank(xp).index;
+      const newXp = xp + earned;
+      const newRankData = getRank(newXp);
+      setXp(newXp); localStorage.setItem('pt_xp', String(newXp));
+      const newHistory = [...history, {
+        title: scenario.title, score, verdict: res.verdict,
+        lesson: res.lesson, cat: scenario.cat||res.cat||"value",
+        mode: scenario.mode||mode, xpEarned: earned
+      }];
+      setHistory(newHistory);
+      if (newRankData.index > oldRankIdx) setLevelUpData({newRank:newRankData, earned, newXp});
+      if (newHistory.length % 5 === 0) {
+        const last5 = newHistory.slice(-5);
+        setMilestoneLoading(true);
+        const buildMilestone = (ins) => {
+          const ct = {};
+          last5.forEach(h=>{ if(!ct[h.cat]) ct[h.cat]={t:0,n:0}; ct[h.cat].t+=h.score; ct[h.cat].n++; });
+          const sorted = Object.entries(ct).map(([cat,{t,n}])=>({cat,avg:Math.round(t/n)})).sort((a,b)=>a.avg-b.avg);
+          setMilestoneData({
+            scores: last5.map(h=>h.score),
+            insight: ins?.insight || `¡Buen trabajo, ${playerName}! Sigue practicando.`,
+            weakCat: sorted[0]?.cat, strongCat: sorted[sorted.length-1]?.cat,
+            xpEarned: last5.reduce((a,h)=>a+(h.xpEarned||0),0), total: newHistory.length,
+          });
+          setMilestoneLoading(false);
+        };
+        generateSessionInsight(playerName, last5).then(buildMilestone).catch(()=>buildMilestone(null));
+      }
       setView("result");
     } catch {
       setEval({verdict:"ERROR",score:0,headline:"Error de conexión",reasoning:"No se pudo analizar. Intenta de nuevo.",better_play:"—",lesson:"—"});
@@ -310,15 +527,16 @@ export default function App() {
   };
 
   const next = async () => {
-    const ni=idx+1; setSelAction(null); setEval(null);
-    if(ni>=allScenarios.length){
+    const ni = idx+1; setSelAction(null); setEval(null);
+    if (milestoneData) { setView("milestone"); return; }
+    if (ni >= allScenarios.length) {
       setView("generating");
-      try{ const s=await generateScenario(mode,aiList.length+1); setAiList(p=>[...p,s]); setIdx(ni); setView("play"); }
-      catch{ setIdx(0); setView("play"); }
+      try { const s = await generateScenario(mode, aiList.length+1); setAiList(p=>[...p,s]); setIdx(ni); setView("play"); }
+      catch { setIdx(0); setView("play"); }
     } else { setIdx(ni); setView("play"); }
   };
 
-  // ── DUEL MODE ──────────────────────────────────────────────────────────────
+  // ── DUEL ACTIONS ───────────────────────────────────────────────────────────
   const startDuel = async () => {
     setView("generating");
     try {
@@ -341,13 +559,11 @@ export default function App() {
       setDuelVillainAction(va);
       newPot += (va.amount||0);
       setDuelPot(newPot); setDuelStack(newStack);
-      // if hero folded or villain folded, end
       if(action.id==="fold"){ setDuelResult("El oponente gana el pot — te retiraste"); endDuel(newActions,"Te retiraste — el oponente gana el pot"); return; }
       if(va.action==="fold"){ setDuelResult("¡Ganaste el pot! — el oponente se retiró"); endDuel(newActions,"¡Ganaste el pot! El oponente se retiró"); return; }
-      // advance street
-      const next = duelStreet==="flop"?"turn":duelStreet==="turn"?"river":"showdown";
-      setDuelStreet(next);
-      if(next==="showdown") { endDuel(newActions,"Llegaron al showdown"); }
+      const nextStreet = duelStreet==="flop"?"turn":duelStreet==="turn"?"river":"showdown";
+      setDuelStreet(nextStreet);
+      if(nextStreet==="showdown") { endDuel(newActions,"Llegaron al showdown"); }
       else setView("duel_play");
     } catch { setView("duel_play"); }
   };
@@ -355,9 +571,9 @@ export default function App() {
   const endDuel = async (actions, result) => {
     setDuelResult(result); setView("duel_eval");
     try {
-      const ev = await evaluateDuelLine(duelHand,actions,result,duelProfile);
+      const ev = await evaluateDuelLine(duelHand, actions, result, duelProfile);
       setDuelEval(ev);
-      setHistory(h=>[...h,{title:`Duelo vs ${VILLAIN_PROFILES[duelProfile].label}`,score:ev.score||0,verdict:ev.verdict,lesson:ev.lesson,cat:"duel",mode:"duel"}]);
+      setHistory(h=>[...h,{title:`Duelo vs ${VILLAIN_PROFILES[duelProfile].label}`,score:ev.score||0,verdict:ev.verdict,lesson:ev.lesson,cat:"duel",mode:"duel",xpEarned:0}]);
     } catch { setDuelEval({verdict:"ERROR",score:0,headline:"Error de análisis",line_analysis:"No se pudo evaluar.",key_mistake:"—",lesson:"—"}); }
   };
 
@@ -367,19 +583,31 @@ export default function App() {
   const openHistory = () => { setPrevView(view); setView("history"); };
   const closeHistory = () => setView(prevView);
 
-  // ── DERIVED ────────────────────────────────────────────────────────────────
-  const vc = eval_ ? (VC[eval_.verdict]||VC["ERROR"]) : null;
-  const dvc = duelEval ? (VC[duelEval.verdict]||VC["ERROR"]) : null;
-  const scMode = scenario?.mode||mode;
-  const sc = DC[scMode]||DC.intermediate;
+  // ── DERIVED UI ─────────────────────────────────────────────────────────────
+  const vc       = eval_ ? (VC[eval_.verdict]||VC["ERROR"]) : null;
+  const dvc      = duelEval ? (VC[duelEval.verdict]||VC["ERROR"]) : null;
+  const scMode   = scenario?.mode||mode;
+  const sc       = DC[scMode]||DC.intermediate;
   const isInCurated = idx<curated.length;
-  const CAT_LABELS = {value:"💰 Value",bluff:"🎭 Bluff",draw:"🎯 Draw",preflop:"🃏 Preflop",position:"📍 Posición",duel:"⚔️ Duelo"};
-  const CAT_COLORS = {value:"#4ade80",bluff:"#fb923c",draw:"#60a5fa",preflop:"#c084fc",position:"#facc15",duel:"#e879f9"};
+  const CAT_LABELS  = {value:"💰 Value",bluff:"🎭 Bluff",draw:"🎯 Draw",preflop:"🃏 Preflop",position:"📍 Posición",duel:"⚔️ Duelo"};
+  const CAT_COLORS  = {value:"#4ade80",bluff:"#fb923c",draw:"#60a5fa",preflop:"#c084fc",position:"#facc15",duel:"#e879f9"};
 
-  // ── SHARED COMPONENTS ──────────────────────────────────────────────────────
+  const Styles = () => <style>{`
+    @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+    @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+    @keyframes hexPop{0%{transform:scale(0.2);opacity:0}65%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}
+    @keyframes confettiFall{0%{transform:translateY(-20px) rotate(0);opacity:1}100%{transform:translateY(120px) rotate(720deg);opacity:0}}
+    *{-webkit-tap-highlight-color:transparent}
+  `}</style>;
+
+  const ThemeBtn = () => (
+    <button onClick={toggleTheme} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:"7px 10px",cursor:"pointer",fontSize:15,lineHeight:1,WebkitTapHighlightColor:"transparent"}}>{isDark?"☀️":"🌙"}</button>
+  );
+
   const Nav = ({onBack,backLabel="← Menú",right}) => (
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px 10px",flexShrink:0}}>
-      <button onClick={onBack} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:"8px 14px",color:G.muted,cursor:"pointer",fontFamily:G.font,fontSize:13,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>{backLabel}</button>
+      <button onClick={onBack} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:"8px 14px",color:G.muted,cursor:"pointer",fontFamily:G.font,fontSize:13,fontWeight:600}}>{backLabel}</button>
       <div style={{display:"flex",alignItems:"center",gap:8}}>{right}</div>
     </div>
   );
@@ -395,18 +623,159 @@ export default function App() {
     </div>
   );
 
-  const Styles = () => <style>{`@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>;
+  const pg = {minHeight:"100vh",background:G.bg,fontFamily:G.font,color:G.text,WebkitFontSmoothing:"antialiased",transition:"background .25s,color .25s"};
 
   // ══════════════════════════════════════════════════════════════════════════
-  // ── MENU ─────────────────────────────────────────────────────────────────
+  // ── WELCOME ──────────────────────────────────────────────────────────────
+  if(view==="welcome") return (
+    <div style={{...pg,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <Styles/>
+      <div style={{width:"100%",maxWidth:340,padding:"0 20px",textAlign:"center",animation:"fadeIn .4s ease"}}>
+        <div style={{width:64,height:64,margin:"0 auto 18px",background:"linear-gradient(145deg,#1e1a12,#2a2416)",border:`2px solid ${G.orange}50`,borderRadius:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:30}}>🃏</div>
+        <h1 style={{margin:"0 0 4px",fontSize:26,fontWeight:900,letterSpacing:-.5}}>Poker Trainer</h1>
+        <p style={{margin:"0 0 36px",color:G.muted,fontSize:12,letterSpacing:2.5}}>TEXAS HOLD'EM</p>
+        <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,padding:"22px 18px",marginBottom:12}}>
+          <div style={{color:G.muted,fontSize:10,fontWeight:700,letterSpacing:1.5,marginBottom:14,textAlign:"center"}}>¿CÓMO TE LLAMAS?</div>
+          <input value={nameInput} onChange={e=>setNameInput(e.target.value)}
+            onKeyDown={e=>e.key==="Enter"&&nameInput.trim()&&(localStorage.setItem('pt_name',nameInput.trim()),setPlayerName(nameInput.trim()),setView("menu"))}
+            placeholder="Escribe tu nombre..." autoFocus
+            style={{width:"100%",background:G.inputBg||G.bg,border:`1px solid ${G.borderMid}`,borderRadius:10,padding:"13px 16px",color:G.text,fontSize:16,fontFamily:G.font,outline:"none",boxSizing:"border-box",textAlign:"center"}}
+          />
+        </div>
+        <button onClick={()=>{if(nameInput.trim()){localStorage.setItem('pt_name',nameInput.trim());setPlayerName(nameInput.trim());setView("menu");}}}
+          disabled={!nameInput.trim()}
+          style={{width:"100%",padding:"15px",background:nameInput.trim()?G.orange:"rgba(255,145,77,0.25)",border:"none",borderRadius:13,color:"#0a0a0f",fontSize:15,fontWeight:800,cursor:nameInput.trim()?"pointer":"default",fontFamily:G.font,marginBottom:16,transition:"background .2s"}}>
+          Empezar a jugar →
+        </button>
+        <div style={{display:"flex",justifyContent:"center"}}><ThemeBtn/></div>
+      </div>
+    </div>
+  );
+
+  // ── LEVEL UP ─────────────────────────────────────────────────────────────
+  if(levelUpData) {
+    const {newRank, earned, newXp} = levelUpData;
+    const confColors = ["#4ade80","#facc15","#fb923c","#e879f9","#60a5fa","#FF914D"];
+    return (
+      <div style={{...pg,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <Styles/>
+        <div style={{position:"fixed",inset:0,pointerEvents:"none",overflow:"hidden"}}>
+          {Array(22).fill(0).map((_,i)=>(
+            <div key={i} style={{position:"absolute",left:`${5+Math.random()*90}%`,top:-15,width:7,height:7,borderRadius:"50%",background:confColors[i%confColors.length],animation:`confettiFall ${1.8+Math.random()*1.5}s ease-in ${Math.random()*1.2}s forwards`}}/>
+          ))}
+        </div>
+        <div style={{maxWidth:480,margin:"0 auto",padding:"0 24px",display:"flex",flexDirection:"column",alignItems:"center",textAlign:"center",animation:"fadeIn .4s ease",position:"relative",zIndex:1}}>
+          <div style={{color:G.muted,fontSize:11,fontWeight:700,letterSpacing:3,marginBottom:20}}>¡NUEVO NIVEL!</div>
+          <div style={{marginBottom:20,animation:"hexPop .7s cubic-bezier(.175,.885,.32,1.275) forwards"}}>
+            <svg viewBox="0 0 130 130" width="130" height="130">
+              <polygon points="65,5 118,35 118,95 65,125 12,95 12,35" fill={`${newRank.color}18`} stroke={newRank.color} strokeWidth="2.5"/>
+              <text x="65" y="60" textAnchor="middle" dominantBaseline="central" fill={newRank.color} fontSize="34" fontWeight="900">{newRank.icon}</text>
+              <text x="65" y="92" textAnchor="middle" dominantBaseline="central" fill={newRank.color} fontSize="11" fontWeight="800" letterSpacing="1">{newRank.name.toUpperCase()}</text>
+            </svg>
+          </div>
+          <h2 style={{margin:"0 0 4px",fontSize:28,fontWeight:900,color:newRank.color}}>¡{newRank.name}!</h2>
+          <p style={{margin:"0 0 24px",color:G.muted,fontSize:14}}>Nivel desbloqueado, {playerName}</p>
+          <div style={{display:"inline-flex",alignItems:"center",gap:8,background:`${newRank.color}15`,border:`1px solid ${newRank.color}40`,borderRadius:20,padding:"8px 18px",marginBottom:28}}>
+            <span style={{color:newRank.color,fontWeight:800,fontSize:18}}>+{earned} XP</span>
+          </div>
+          <div style={{width:"100%",maxWidth:300,marginBottom:32}}>
+            <XPBar xp={newXp} showLabel/>
+          </div>
+          <button onClick={()=>{setLevelUpData(null); if(milestoneData) setView("milestone");}}
+            style={{width:"100%",maxWidth:300,padding:"15px",background:newRank.color,border:"none",borderRadius:13,color:"#0a0a0f",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:G.font}}>
+            ¡Seguir jugando! →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── MILESTONE (every 5 hands) ─────────────────────────────────────────────
+  if(view==="milestone" && milestoneData) {
+    const {scores, insight, weakCat, strongCat, xpEarned, total} = milestoneData;
+    const avg = Math.round(scores.reduce((a,b)=>a+b,0)/scores.length);
+    const avgCol = avg>=75?"#4ade80":avg>=55?"#facc15":"#fb923c";
+    return (
+      <div style={pg}>
+        <Styles/>
+        <div style={{maxWidth:480,margin:"0 auto",padding:"20px 16px 48px",animation:"fadeIn .3s ease"}}>
+          <div style={{textAlign:"center",marginBottom:20}}>
+            <div style={{color:G.muted,fontSize:11,fontWeight:700,letterSpacing:3,marginBottom:6}}>RONDA COMPLETADA</div>
+            <h2 style={{margin:"0 0 4px",fontSize:22,fontWeight:900}}>¡Bien jugado, {playerName}!</h2>
+            <p style={{margin:0,color:G.muted,fontSize:13}}>{total} manos totales</p>
+          </div>
+          <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:16,padding:"16px",marginBottom:10}}>
+            <div style={{color:G.muted,fontSize:10,fontWeight:700,letterSpacing:1.5,marginBottom:12}}>ÚLTIMAS 5 MANOS</div>
+            <div style={{display:"flex",alignItems:"flex-end",gap:6,height:80,marginBottom:8}}>
+              {scores.map((s,i)=>{
+                const col=s>=80?"#4ade80":s>=60?"#facc15":"#fb923c";
+                return <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                  <div style={{width:"100%",background:col,borderRadius:"4px 4px 2px 2px",height:`${(s/100)*72}px`,minHeight:4,transition:"height 1s ease"}}/>
+                  <span style={{color:G.muted,fontSize:10,fontWeight:700}}>{s}</span>
+                </div>;
+              })}
+            </div>
+            <div style={{display:"flex",justifyContent:"space-around",borderTop:`1px solid ${G.border}`,paddingTop:10}}>
+              <div style={{textAlign:"center"}}><div style={{color:avgCol,fontSize:22,fontWeight:900}}>{avg}</div><div style={{color:G.muted,fontSize:9,fontWeight:700,letterSpacing:1,marginTop:2}}>PROMEDIO</div></div>
+              <div style={{textAlign:"center"}}><div style={{color:G.orange,fontSize:22,fontWeight:900}}>+{xpEarned}</div><div style={{color:G.muted,fontSize:9,fontWeight:700,letterSpacing:1,marginTop:2}}>XP GANADO</div></div>
+              <div style={{textAlign:"center"}}><div style={{color:rank.color,fontSize:18,fontWeight:900}}>{rank.icon}</div><div style={{color:G.muted,fontSize:9,fontWeight:700,letterSpacing:1,marginTop:2}}>{rank.name.toUpperCase()}</div></div>
+            </div>
+          </div>
+          <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:"13px 14px",marginBottom:10}}>
+            <div style={{color:G.muted,fontSize:10,fontWeight:700,letterSpacing:1.5,marginBottom:8}}>PROGRESO DE NIVEL</div>
+            <XPBar xp={xp} showLabel/>
+          </div>
+          <div style={{display:"flex",gap:8,marginBottom:10}}>
+            <div style={{flex:1,background:"rgba(74,222,128,0.06)",border:"1px solid rgba(74,222,128,0.2)",borderRadius:12,padding:"12px"}}>
+              <div style={{color:"#4ade80",fontSize:9,fontWeight:700,letterSpacing:1.2,marginBottom:4}}>PUNTO FUERTE</div>
+              <div style={{color:G.text,fontSize:13,fontWeight:700}}>{CAT_LABELS[strongCat]||"—"}</div>
+            </div>
+            <div style={{flex:1,background:"rgba(251,146,60,0.06)",border:"1px solid rgba(251,146,60,0.2)",borderRadius:12,padding:"12px"}}>
+              <div style={{color:"#fb923c",fontSize:9,fontWeight:700,letterSpacing:1.2,marginBottom:4}}>A MEJORAR</div>
+              <div style={{color:G.text,fontSize:13,fontWeight:700}}>{CAT_LABELS[weakCat]||"—"}</div>
+            </div>
+          </div>
+          <div style={{background:`${G.orange}08`,border:`1px solid ${G.orange}25`,borderRadius:12,padding:"13px 14px",marginBottom:20,display:"flex",gap:10,alignItems:"flex-start"}}>
+            <div style={{width:28,height:28,borderRadius:8,background:`${G.orange}20`,border:`1px solid ${G.orange}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>🧠</div>
+            <div>
+              <div style={{color:G.orange,fontSize:10,fontWeight:700,letterSpacing:1.5,marginBottom:4}}>ANÁLISIS DE TU JUEGO</div>
+              {milestoneLoading
+                ? <div style={{color:G.muted,fontSize:13,animation:"pulse 1.2s ease-in-out infinite"}}>Analizando tu sesión...</div>
+                : <ParsedText text={insight} style={{color:"#d4c8b8",fontSize:13,lineHeight:1.65}}/>
+              }
+            </div>
+          </div>
+          <button onClick={()=>{ setMilestoneData(null); setView("play"); }}
+            style={{width:"100%",padding:"15px",background:G.orange,border:"none",borderRadius:13,color:"#0a0a0f",fontSize:15,fontWeight:800,cursor:"pointer",fontFamily:G.font}}>
+            Seguir entrenando →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+
+  // ── MENU ───────────────────────────────────────────────────────────────────
   if(view==="menu") return (
-    <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.font,color:G.text,WebkitFontSmoothing:"antialiased"}}>
+    <div style={pg}>
+      <Styles/>
       <div style={{maxWidth:480,margin:"0 auto",padding:"0 16px 48px"}}>
         {/* Header */}
-        <div style={{textAlign:"center",padding:"36px 0 24px"}}>
-          <div style={{width:52,height:52,margin:"0 auto 14px",background:"linear-gradient(145deg,#1e1a12,#2a2416)",border:`1px solid ${G.orange}40`,borderRadius:14,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>🃏</div>
-          <h1 style={{margin:"0 0 3px",fontSize:22,fontWeight:800,letterSpacing:-0.5}}>Poker Trainer</h1>
-          <p style={{margin:0,color:G.muted,fontSize:11,fontWeight:600,letterSpacing:2.5}}>TEXAS HOLD'EM</p>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"28px 0 12px"}}>
+          <div>
+            <h1 style={{margin:"0 0 3px",fontSize:20,fontWeight:900}}>Hola, {playerName} 👋</h1>
+            <div style={{display:"flex",alignItems:"center",gap:7}}>
+              <span style={{color:rank.color,fontSize:12,fontWeight:700}}>{rank.icon} {rank.name}</span>
+              <span style={{color:G.muted,fontSize:12}}>· {xp} XP</span>
+              {streak>=3&&<span style={{background:"rgba(251,146,60,0.15)",border:"1px solid rgba(251,146,60,0.3)",borderRadius:10,padding:"1px 7px",color:"#fb923c",fontSize:10,fontWeight:700}}>🔥 {streak}</span>}
+            </div>
+          </div>
+          <ThemeBtn/>
+        </div>
+
+        {/* XP Bar */}
+        <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:"13px 14px",marginBottom:14}}>
+          <XPBar xp={xp} showLabel/>
         </div>
 
         {/* Mode selector */}
@@ -459,25 +828,13 @@ export default function App() {
           {history.length>0&&<button onClick={openHistory} style={{flex:1,padding:"11px",background:"transparent",border:`1px solid ${G.border}`,borderRadius:12,color:G.muted,fontSize:13,cursor:"pointer",fontFamily:G.font}}>📊 Mi Sesión</button>}
         </div>
 
-        {/* Stats */}
-        {history.length>0&&(
-          <div style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:12,padding:"14px 16px",display:"flex"}}>
-            {[["MANOS",history.length,G.text],["SCORE AVG",avgScore,avgScore>=75?"#4ade80":avgScore>=55?"#facc15":"#fb923c"]].map(([l,v,col],i)=>(
-              <div key={l} style={{flex:1,textAlign:"center",borderRight:i===0?`1px solid ${G.border}`:"none"}}>
-                <div style={{color:col,fontSize:24,fontWeight:800}}>{v}</div>
-                <div style={{color:G.muted,fontSize:10,fontWeight:700,letterSpacing:1.2,marginTop:2}}>{l}</div>
-              </div>
-            ))}
-          </div>
-        )}
-        <div style={{background:`${G.orange}0a`,border:`1px solid ${G.orange}20`,borderRadius:10,padding:"10px 13px",marginTop:10}}>
-          <p style={{color:"#c8bfb0",fontSize:13,margin:0,lineHeight:1.6}}>Los términos en <span style={{color:G.orange,borderBottom:`1px dashed ${G.orange}88`}}>naranja</span> son clickeables — tócalos para ver su definición.</p>
+        <div style={{background:`${G.orange}0a`,border:`1px solid ${G.orange}20`,borderRadius:10,padding:"10px 13px"}}>
+          <p style={{color:G.muted,fontSize:12,margin:0,lineHeight:1.6}}>Los términos en <span style={{color:G.orange,fontWeight:600}}>naranja</span> son clickeables — tócalos para ver su definición.</p>
         </div>
       </div>
     </div>
   );
 
-  // ── GLOSSARY ──────────────────────────────────────────────────────────────
   if(view==="glossary") return (
     <div style={{minHeight:"100vh",background:G.bg,fontFamily:G.font,color:G.text}}>
       <div style={{maxWidth:480,margin:"0 auto",padding:"0 16px 48px"}}>
@@ -834,7 +1191,7 @@ export default function App() {
           right={<>
             {history.length>0&&<div style={{textAlign:"center"}}><div style={{color:avgScore>=75?"#4ade80":avgScore>=55?"#facc15":"#fb923c",fontSize:15,fontWeight:800,lineHeight:1}}>{avgScore}</div><div style={{color:G.muted,fontSize:9,fontWeight:700,letterSpacing:1}}>AVG</div></div>}
             <button onClick={openHistory} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:"7px 11px",color:G.muted,cursor:"pointer",fontFamily:G.font,fontSize:12,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>📊</button>
-            <button onClick={openGlossary} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:"7px 11px",color:G.muted,cursor:"pointer",fontFamily:G.font,fontSize:12,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>📖</button>
+            <button onClick={openGlossary} style={{background:G.surface,border:`1px solid ${G.border}`,borderRadius:10,padding:"7px 11px",color:G.muted,cursor:"pointer",fontFamily:G.font,fontSize:12,fontWeight:600,WebkitTapHighlightColor:"transparent"}}>📖</button><ThemeBtn/>
           </>}
         />
         <div style={{flex:1,overflowY:"auto",padding:"0 16px 24px",animation:"fadeIn 0.2s ease"}}>
@@ -913,17 +1270,22 @@ export default function App() {
                   </div>
                   <div style={{color:"#c8bfb0",fontSize:13,lineHeight:1.4}}>{eval_.headline}</div>
                 </div>
-                <ScoreRing score={eval_.score} size={60}/>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5}}>
+                  <ScoreRing score={eval_.score} size={60}/>
+                  <div style={{background:`${G.orange}15`,border:`1px solid ${G.orange}30`,borderRadius:10,padding:"2px 9px"}}>
+                    <span style={{color:G.orange,fontSize:11,fontWeight:800}}>+{history[history.length-1]?.xpEarned||0} XP</span>
+                  </div>
+                </div>
               </div>
               <IB label="TU DECISIÓN" accent><div style={{color:G.orange,fontWeight:700,fontSize:13}}>{selAction?.label}{selAction?.amount?` — $${selAction.amount}`:""}</div></IB>
-              <IB label="¿POR QUÉ?"><p style={{color:"#c8bfb0",fontSize:14,margin:0,lineHeight:1.7}}>{eval_.reasoning}</p></IB>
-              <IB label="LO IDEAL HUBIERA SIDO"><p style={{color:"#c8bfb0",fontSize:14,margin:0,lineHeight:1.7}}>{eval_.better_play}</p></IB>
+              <IB label="¿POR QUÉ?"><p style={{color:"#c8bfb0",fontSize:14,margin:0,lineHeight:1.7}}><ParsedText text={eval_.reasoning} /></p></IB>
+              <IB label="LO IDEAL HUBIERA SIDO"><p style={{color:"#c8bfb0",fontSize:14,margin:0,lineHeight:1.7}}><ParsedText text={eval_.better_play} /></p></IB>
               <div style={{background:`${G.orange}08`,border:`1px solid ${G.orange}25`,borderRadius:12,padding:"12px 13px",marginBottom:14,display:"flex",gap:9,alignItems:"flex-start"}}>
                 <div style={{width:26,height:26,borderRadius:7,background:`${G.orange}20`,border:`1px solid ${G.orange}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0}}>💡</div>
-                <div><div style={{color:G.orange,fontSize:9,fontWeight:700,letterSpacing:1.5,marginBottom:4}}>LECCIÓN</div><p style={{color:"#d4c8b8",fontSize:13,margin:0,fontWeight:500,lineHeight:1.6}}>{eval_.lesson}</p></div>
+                <div><div style={{color:G.orange,fontSize:9,fontWeight:700,letterSpacing:1.5,marginBottom:4}}>LECCIÓN</div><p style={{color:"#d4c8b8",fontSize:13,margin:0,fontWeight:500,lineHeight:1.6}}><ParsedText text={eval_.lesson} /></p></div>
               </div>
               <button onClick={next} style={{width:"100%",padding:"15px",background:sc.text,border:"none",borderRadius:13,color:"#0a0a0f",fontSize:14,fontWeight:800,cursor:"pointer",fontFamily:G.font,WebkitTapHighlightColor:"transparent"}}>
-                {idx+1>=allScenarios.length?"Generar nueva mano →":"Siguiente mano →"}
+                {milestoneData?"Ver resumen →":idx+1>=allScenarios.length?"Generar nueva mano →":"Siguiente mano →"}
               </button>
             </div>
           )}
